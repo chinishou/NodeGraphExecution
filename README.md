@@ -19,10 +19,12 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for details.
 - [ ] Export graph as Python script
 - [ ] Undo/Redo
 - [ ] CLI
+- [ ] Export graph as Mermaid diagram
 
 ## Reference Projects
 
-- [QtNodes](https://github.com/paceholder/nodeeditor)
 - [NodeGraphQt](https://github.com/jchanvfx/NodeGraphQt)
-- [PyFlow](https://github.com/pedroCabrera/PyFlow)
 - [Nodezator](https://github.com/IndieSmiths/nodezator)
+- [PyFlow](https://github.com/pedroCabrera/PyFlow)
+- [QtNodes](https://github.com/paceholder/nodeeditor)
+- [Ryven](https://github.com/leon-thomm/Ryven)
