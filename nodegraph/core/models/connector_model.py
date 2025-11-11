@@ -9,6 +9,8 @@ Connectors allow data to flow between nodes.
 from typing import Optional, Any
 from enum import Enum
 
+from .node_model import NodeModel
+
 
 class ConnectorType(Enum):
     INPUT = "input"
@@ -29,6 +31,7 @@ class ConnectorModel:
         node: The node this connector belongs to
         multi_connection: Whether multiple connections are allowed
         default_value: Default value if no connection
+        _connector_pairs: tuples of connector pairs
     """
 
     def __init__(
@@ -37,7 +40,7 @@ class ConnectorModel:
         connector_type: ConnectorType,
         data_type: str = "any",
         display_name: Optional[str] = None,
-        node: Optional["NodeModel"] = None,
+        node: Optional[NodeModel] = None,
         multi_connection: bool = False,
         default_value: Any = None,
     ):
@@ -50,7 +53,7 @@ class ConnectorModel:
         self.default_value = default_value
 
         # Store connections (for outputs: list of connectors, for inputs: single/multiple connectors)
-        self._connections: list["ConnectorModel"] = []
+        self._connector_pairs: list[ConnectorModel] = []
 
         # Cached value (for data flow)
         self._cached_value: Any = None
@@ -65,11 +68,11 @@ class ConnectorModel:
 
     def is_connected(self) -> bool:
         """Check if this connector has any connections."""
-        return len(self._connections) > 0
+        return len(self._connector_pairs) > 0
 
-    def connections(self) -> list["ConnectorModel"]:
+    def connector_pairs(self) -> list["ConnectorModel"]:
         """Get list of connected connectors."""
-        return self._connections.copy()
+        return self._connector_pairs.copy()
 
     def _can_connect_to(self, other: "ConnectorModel") -> bool:
         """Check if connection to another connector is valid."""
@@ -89,3 +92,49 @@ class ConnectorModel:
             return False
 
         return True
+
+    def connect_to(self, other: "ConnectorModel") -> bool:
+        """
+        Connect this connector to another connector.
+
+        Args:
+            other: The connector to connect to
+
+        Returns:
+            True if connection was successful, False otherwise
+        """
+        # Validate connection
+        if not self._can_connect_to(other):
+            return False
+
+        # Add connection
+        if other not in self._connector_pairs:
+            self._connector_pairs.append(other)
+            # Also add reverse connection
+            if self not in other._connector_pairs:
+                other._connector_pairs.append(self)
+
+            return True
+
+        return False
+
+    def disconnect_from(self, other: "ConnectorModel") -> bool:
+        """
+        Disconnect from another connector.
+
+        Args:
+            other: The connector to disconnect from
+
+        Returns:
+            True if disconnection was successful
+        """
+        if other in self._connector_pairs:
+            self._connector_pairs.remove(other)
+
+            # Also remove reverse connection
+            if self in other._connector_pairs:
+                other._connector_pairs.remove(self)
+
+            return True
+
+        return False
