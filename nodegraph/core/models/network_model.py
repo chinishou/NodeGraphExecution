@@ -9,9 +9,9 @@ A network contains nodes and connections between them.
 from typing import Dict, List, Optional, Tuple, Any
 from uuid import UUID
 import re
-from collections import defaultdict, deque
-from .node_model import NodeModel
+
 from .connector_model import ConnectorModel
+from .node_model import NodeModel
 from ..signals import Signal
 
 
@@ -79,18 +79,15 @@ class NetworkModel:
         Returns:
             A unique name (original or with suffix like _1, _2, etc.)
         """
-        # Get all existing node names
         existing_names = {node.name for node in self._nodes.values()}
 
         if base_name not in existing_names:
             return base_name
 
-        # Strip existing suffix if present (e.g., "Node_1" -> "Node")
         match = re.match(r'^(.+?)_(\d+)$', base_name)
         if match:
             base_name = match.group(1)
 
-        # Find the next available suffix
         counter = 1
         while f"{base_name}_{counter}" in existing_names:
             counter += 1
@@ -253,7 +250,74 @@ class NetworkModel:
         """
         return self._connector_pairs.copy()
 
+    # Execution
+
+    def get_execution_order(self) -> List[NodeModel]:
+        """
+        Get nodes in topological execution order.
+
+        Returns nodes sorted such that dependencies are cooked before dependents.
+        Uses local topological sorting on terminal nodes and combines results.
+
+        Returns:
+            List of nodes in execution order
+        """
+        nodes = self.nodes()
+
+        if not nodes:
+            return []
+
+        # Find terminal nodes (nodes with no downstream connections)
+        terminal_nodes = []
+        for node in nodes:
+            has_downstream = any(
+                output_conn.is_connected()
+                for output_conn in node.outputs().values()
+            )
+            if not has_downstream:
+                terminal_nodes.append(node)
+
+        # If no terminal nodes found, use all nodes as potential terminals
+        # (this handles isolated nodes or cycles)
+        if not terminal_nodes:
+            terminal_nodes = nodes
+
+        # Process each terminal node using local topological sort
+        processed = set()
+        result = []
+
+        for terminal in terminal_nodes:
+            local_order = terminal._get_local_execution_order()
+            for node in local_order:
+                if node.id not in processed:
+                    result.append(node)
+                    processed.add(node.id)
+
+        # Check if all nodes are processed
+        if len(result) != len(nodes):
+            unprocessed = [node.name for node in nodes if node.id not in processed]
+            error_msg = (
+                f"Cyclic dependency detected in network '{self.name}'. "
+                f"Nodes in cycle: {', '.join(unprocessed)}. "
+                f"Cannot determine execution order."
+            )
+            raise ValueError(error_msg)
+
+        return result
+
+    def mark_all_dirty(self) -> None:
+        """Mark all nodes as dirty."""
+        for node in self._nodes.values():
+            node.mark_dirty()
+
     # Utility methods
+
+    def clear(self) -> None:
+        """Remove all nodes and connections."""
+        self._connector_pairs.clear()
+        node_ids = list(self._nodes.keys())
+        for node_id in node_ids:
+            self.remove_node(node_id)
 
     def find_parent_nodes(self, node: NodeModel) -> List[NodeModel]:
         """Find all parent nodes (nodes feeding into this node)."""
@@ -276,6 +340,33 @@ class NetworkModel:
                     children.append(connected_input.node)
 
         return children
+
+    def has_cycle(self) -> bool:
+        """Check if the network contains any cycles."""
+        visited = set()
+        rec_stack = set()
+
+        def visit(node_id: str) -> bool:
+            visited.add(node_id)
+            rec_stack.add(node_id)
+
+            node = self._nodes[node_id]
+            for child in self.find_child_nodes(node):
+                if child.id not in visited:
+                    if visit(child.id):
+                        return True
+                elif child.id in rec_stack:
+                    return True
+
+            rec_stack.remove(node_id)
+            return False
+
+        for node_id in self._nodes:
+            if node_id not in visited:
+                if visit(node_id):
+                    return True
+
+        return False
 
     # Serialization
 
