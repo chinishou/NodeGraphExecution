@@ -34,10 +34,10 @@ class Signal:
         """Disconnect a callable from this signal."""
         for i, weak_slot in enumerate(self._slots):
             # Handle both weak and strong references
-            if callable(weak_slot):
-                actual_slot = weak_slot
-            else:
+            if isinstance(weak_slot, (WeakMethod, ref)):
                 actual_slot = weak_slot()
+            else:
+                actual_slot = weak_slot
 
             if actual_slot == slot:
                 self._slots.pop(i)
@@ -67,15 +67,15 @@ class Signal:
 
     def _is_alive(self, slot_ref: Any) -> bool:
         """Check if a slot reference is still alive."""
-        if callable(slot_ref):
-            return True  # Strong reference
-        return slot_ref() is not None  # Weak reference
+        if isinstance(slot_ref, (WeakMethod, ref)):
+            return slot_ref() is not None  # Weak reference
+        return True  # Strong reference (always alive)
 
     def _get_callable(self, slot_ref: Any) -> Callable:
         """Get the actual callable from a reference."""
-        if callable(slot_ref):
-            return slot_ref  # Strong reference
-        return slot_ref()  # Weak reference
+        if isinstance(slot_ref, (WeakMethod, ref)):
+            return slot_ref()  # Dereference weak reference
+        return slot_ref  # Strong reference
 
     def _cleanup(self, dead_ref: ReferenceType[Any]) -> None:
         """Callback when a weakly referenced slot is garbage-collected."""
